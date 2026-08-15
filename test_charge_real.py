@@ -1,6 +1,6 @@
 """
 Neptune 充电桩 - 实际充电测试
-设备: 50559141
+设备: 50959132
 端口: 12
 """
 
@@ -32,8 +32,8 @@ if not OPEN_ID or AREA_ID is None:
     raise RuntimeError(
         "缺少 .env 配置：请在 .env 中设置 NEPTUNE_OPEN_ID 与 NEPTUNE_AREA_ID（参考 .env.example）"
     )
-DEV_ADDRESS = "50559141"  # 目标设备
-TARGET_PORT = "12"  # 目标物理端口（Neptune 端口号从 1 开始）
+DEV_ADDRESS = os.getenv("NEPTUNE_TEST_DEVICE", "50959132")  # 目标设备
+TARGET_PORT = os.getenv("NEPTUNE_TEST_PORT", "12")  # 物理端口号（从 1 开始）
 
 BASE_URL = "http://www.szlzxn.cn"
 

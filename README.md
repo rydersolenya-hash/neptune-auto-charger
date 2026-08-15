@@ -85,6 +85,81 @@ cp .env.example .env
 python main.py
 ```
 
+## 充电计划预览
+
+只查询昨晚对应的设备和物理端口，不会启动充电：
+
+```bash
+python main.py --dry-run
+```
+
+默认预定时间为北京时间 `06:05`，也可以指定其他时间：
+
+```bash
+python main.py --dry-run --schedule-time 07:30
+```
+
+预览会输出 JSON，包含 `device`、`port`、`scheduled_time`、`port_status` 和 `ready`，方便后续接入快捷指令或 HTTP 接口。
+
+## 终端三参数定时充电
+
+电脑端可以直接输入设备编号、物理端口号和北京时间，到点后启动充电：
+
+```powershell
+python schedule_charge.py 50959132 12 06:05
+```
+
+脚本会先输出计划并保持运行，到点后重新查询余额、设备和端口状态，再调用启动接口。首次测试默认金额为 1 元；电脑必须保持开机、联网，按 `Ctrl+C` 可在到点前取消。也可以使用 `--charge-money` 覆盖金额参数。
+
+如果计划任务本身已经在目标时间启动，可使用一次性入口直接检查端口；它不会等待到第二天，只在端口空闲时启动充电：
+
+```powershell
+python charge_once.py 50959132 12
+```
+
+## 当前订单和端口查询
+
+只读查询当前月份订单字段以及设备实时端口状态，不会启动充电：
+
+```powershell
+python current_order.py
+```
+
+接口返回的历史记录如果没有结束时间，会作为进行中订单候选；如果接口只返回已结束记录，工具仍会输出实时端口占用状态。
+
+## iPhone 快捷指令接口
+
+启动 API 服务：
+
+```bash
+set NEPTUNE_API_TOKEN=请替换为随机长令牌
+python shortcut_api.py
+```
+
+接口如下：
+
+- `GET /health`：健康检查
+- `POST /v1/plan`：查询设备、端口和状态，不启动充电
+- `POST /v1/charge`：检查端口后启动充电
+
+请求示例：
+
+```json
+{
+  "device": "50959132",
+  "port": "12",
+  "scheduled_time": "06:05",
+  "charge_money": 100
+}
+```
+
+快捷指令建议分成两部分：
+
+1. 创建一个“充电”快捷指令，使用“询问输入”获取设备编号和端口号，或者使用“从菜单中选取”；然后用“获取 URL 内容”向 `/v1/plan` 查询。
+2. 创建 iPhone 的“个人自动化 → 特定时间”，在设定的时间运行同一个快捷指令；确认 `ready=true` 后，再向 `/v1/charge` 发送相同 JSON。
+
+API 必须部署在 iPhone 可访问的 HTTPS 地址上，不能直接使用电脑的 `127.0.0.1`。`NEPTUNE_API_TOKEN` 只放在服务器和快捷指令的请求头中，不要放入 URL。
+
 ## 运行示例
 
 ```

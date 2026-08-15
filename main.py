@@ -17,6 +17,7 @@ VPS 定时任务：
 import argparse
 import aiohttp
 import asyncio
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -27,13 +28,15 @@ from charge_confirmation import (
     MAX_CONFIRMATION_ATTEMPTS,
     confirm_charge,
 )
+from charge_schedule import build_charge_plan, parse_schedule_time
 from charge_request import build_charge_params
-from ports import is_port_free
+from ports import get_port_status, is_port_free
 from config import (
     OPEN_ID,
     AREA_ID,
     EMPLOYEE_ID,
     MAX_CHARGE_TIME,
+    SCHEDULE_TIME,
     BASE_URL,
     POWER_OFF_WINDOW_START_HOUR,
     POWER_OFF_WINDOW_START_MINUTE,
@@ -114,9 +117,14 @@ async def begin_charge(
     port: str,
     money: int,
     device_info: dict,
+    charge_money: Optional[int] = None,
 ) -> dict:
     """启动充电（两步调用）"""
     url = f"{BASE_URL}/wxn/beginCharge"
+    request_kwargs = {}
+    if charge_money is not None:
+        request_kwargs["charge_money"] = charge_money
+
     params = build_charge_params(
         devaddress,
         port,
@@ -124,6 +132,7 @@ async def begin_charge(
         device_info,
         AREA_ID,
         OPEN_ID,
+        **request_kwargs,
     )
 
     # 第一次调用 - 获取 msgflag
@@ -210,7 +219,11 @@ def find_power_off_record(logs: list) -> Optional[dict]:
     return None
 
 
-async def try_charge(session: aiohttp.ClientSession, dry_run: bool = False) -> Tuple[ChargeResult, str]:
+async def try_charge(
+    session: aiohttp.ClientSession,
+    dry_run: bool = False,
+    schedule_time: str = SCHEDULE_TIME,
+) -> Tuple[ChargeResult, str]:
     """
     尝试充电
 
@@ -266,12 +279,15 @@ async def try_charge(session: aiohttp.ClientSession, dry_run: bool = False) -> T
 
         portstatur = device_info.get("portstatur", "")
         log(f"端口状态: {portstatur}")
+        port_status = get_port_status(portstatur, port)
 
-        # 5. 检查端口是否空闲
-        if not is_port_free(portstatur, port):
-            return ChargeResult.PORT_BUSY, f"端口 {port} 非空闲（可能充电桩未开启）"
-
-        log(f"端口 {port} 空闲，准备充电")
+        plan = build_charge_plan(
+            devaddress,
+            port,
+            port_status,
+            schedule_time=schedule_time,
+            balance=balance,
+        )
 
         if dry_run:
             params = build_charge_params(
@@ -282,11 +298,17 @@ async def try_charge(session: aiohttp.ClientSession, dry_run: bool = False) -> T
                 AREA_ID,
                 OPEN_ID,
             )
+            plan["charge_money"] = params["money"]
+            plan["charge_money_yuan"] = round(params["money"] / 100, 2)
             log("DRY RUN — 充电未启动")
-            log(f"预览: 设备={params['devaddress']}, 物理端口={params['port']}")
-            log(f"预览: money 请求选项={params['money']}")
-            log(f"预览: 可用余额 / beforemoney={params['beforemoney']}")
+            print(json.dumps(plan, ensure_ascii=False))
             return ChargeResult.DRY_RUN, "DRY RUN — charging not started / 充电未启动"
+
+        # 5. 检查端口是否空闲
+        if not is_port_free(portstatur, port):
+            return ChargeResult.PORT_BUSY, f"端口 {port} 非空闲（可能充电桩未开启）"
+
+        log(f"端口 {port} 空闲，准备充电")
 
         # 6. 启动充电
         log(f"启动充电: 设备={devaddress}, 端口={port}, 金额={balance / 100:.2f}元")
@@ -301,9 +323,16 @@ async def try_charge(session: aiohttp.ClientSession, dry_run: bool = False) -> T
         return ChargeResult.ERROR, f"发生异常: {str(e)}"
 
 
-async def main(dry_run: bool = False):
+async def main(dry_run: bool = False, schedule_time: str = SCHEDULE_TIME):
+    try:
+        schedule_time = parse_schedule_time(schedule_time).strftime("%H:%M")
+    except ValueError as exc:
+        log(f"配置错误: {exc}")
+        return
+
     log("=" * 50)
     log("Neptune 自动充电脚本启动")
+    log(f"预定启动时间: {schedule_time}（北京时间）")
     if dry_run:
         log("DRY RUN — 仅评估一次，充电未启动")
     else:
@@ -325,7 +354,11 @@ async def main(dry_run: bool = False):
         log(f"\n--- 第 {attempt}/{attempts} 次尝试 ---")
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            result, message = await try_charge(session, dry_run=dry_run)
+            result, message = await try_charge(
+                session,
+                dry_run=dry_run,
+                schedule_time=schedule_time,
+            )
 
         if result == ChargeResult.DRY_RUN:
             log(f"结果: {message}")
@@ -366,6 +399,12 @@ def parse_args():
         action="store_true",
         help="评估并预览充电请求，但不启动充电",
     )
+    parser.add_argument(
+        "--schedule-time",
+        default=SCHEDULE_TIME,
+        metavar="HH:MM",
+        help=f"预定启动时间（北京时间，默认 {SCHEDULE_TIME}）",
+    )
     return parser.parse_args()
 
 
@@ -376,4 +415,4 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8")
 
-    asyncio.run(main(dry_run=args.dry_run))
+    asyncio.run(main(dry_run=args.dry_run, schedule_time=args.schedule_time))

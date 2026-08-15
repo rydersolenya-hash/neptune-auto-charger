@@ -18,6 +18,7 @@ EMPLOYEE_ID = int(os.getenv("NEPTUNE_EMPLOYEE_ID", "0"))
 
 # 充电设置
 MAX_CHARGE_TIME = 480  # 最大充电时长（分钟）
+SCHEDULE_TIME = os.getenv("NEPTUNE_SCHEDULE_TIME", "06:05")  # 北京时间 HH:MM
 
 # API 配置
 BASE_URL = "http://www.szlzxn.cn"

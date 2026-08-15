@@ -27,7 +27,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m unittest test_ports.py test_charge_request.py test_charge_confirmation.py
+          python -m unittest discover -v
 
       - name: Create .env file
         run: |
