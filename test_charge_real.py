@@ -8,6 +8,7 @@ import aiohttp
 import asyncio
 import os
 import sys
+import unittest
 
 from dotenv import load_dotenv
 from charge_confirmation import (
@@ -29,6 +30,12 @@ _area_id_raw = os.getenv("NEPTUNE_AREA_ID")
 AREA_ID = int(_area_id_raw) if _area_id_raw else None
 
 if not OPEN_ID or AREA_ID is None:
+    # This is a manual live-charge helper, not an automated CI test.  Do not
+    # fail test discovery before the workflow has created its .env file.
+    if __name__ != "__main__":
+        raise unittest.SkipTest(
+            "跳过实际充电测试：CI 测试发现阶段未提供 Neptune 凭据"
+        )
     raise RuntimeError(
         "缺少 .env 配置：请在 .env 中设置 NEPTUNE_OPEN_ID 与 NEPTUNE_AREA_ID（参考 .env.example）"
     )

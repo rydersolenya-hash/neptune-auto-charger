@@ -30,10 +30,19 @@ jobs:
           python -m unittest discover -v
 
       - name: Create .env file
+        env:
+          NEPTUNE_OPEN_ID: ${{ secrets.NEPTUNE_OPEN_ID }}
+          NEPTUNE_AREA_ID: ${{ secrets.NEPTUNE_AREA_ID }}
+          NEPTUNE_EMPLOYEE_ID: ${{ secrets.NEPTUNE_EMPLOYEE_ID }}
         run: |
-          echo "NEPTUNE_OPEN_ID=${{ secrets.NEPTUNE_OPEN_ID }}" >> .env
-          echo "NEPTUNE_AREA_ID=${{ secrets.NEPTUNE_AREA_ID }}" >> .env
-          echo "NEPTUNE_EMPLOYEE_ID=${{ secrets.NEPTUNE_EMPLOYEE_ID }}" >> .env
+          test -n "$NEPTUNE_OPEN_ID" || { echo "Missing GitHub Actions secret: NEPTUNE_OPEN_ID"; exit 1; }
+          test -n "$NEPTUNE_AREA_ID" || { echo "Missing GitHub Actions secret: NEPTUNE_AREA_ID"; exit 1; }
+          test -n "$NEPTUNE_EMPLOYEE_ID" || { echo "Missing GitHub Actions secret: NEPTUNE_EMPLOYEE_ID"; exit 1; }
+          {
+            printf 'NEPTUNE_OPEN_ID=%s\n' "$NEPTUNE_OPEN_ID"
+            printf 'NEPTUNE_AREA_ID=%s\n' "$NEPTUNE_AREA_ID"
+            printf 'NEPTUNE_EMPLOYEE_ID=%s\n' "$NEPTUNE_EMPLOYEE_ID"
+          } > .env
 
       - name: Run auto charge script
         run: |
